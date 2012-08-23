@@ -757,6 +757,13 @@ $.fn.jqGrid = function( pin ) {
 			ignoreCase : false,
 			cmTemplate : {},
 			idPrefix : ""
+			//+bvn13
+			,
+			treeGrid_bigData: false,
+			treeGrid_rootParams: {otherData:{}},
+			treeGrid_beforeRequest: null,
+			treeGrid_afterLoadComplete: null
+			//-bvn13
 		}, $.jgrid.defaults, pin || {});
 		var ts= this, grid={
 			headers:[],
@@ -1125,6 +1132,69 @@ $.fn.jqGrid = function( pin ) {
 			return '<tr role="row" id="' + id + '" tabindex="' + tabindex + '" class="' + classes + '"' +
 				(style === '' ? '' : ' style="' + style + '"') + restAttr + '>';
 		},
+		//+bvn13
+		treeGrid_beforeRequest = function() {
+			if (ts.p.treeGrid && ts.p.treeGrid_bigData) {
+				if (	ts.p.postData.nodeid != undefined 
+					&& 	typeof(ts.p.postData.nodeid) === 'string' 
+					&&	(
+							ts.p.postData.nodeid != ""
+						||	parseInt(ts.p.postData.nodeid,10) > 0
+						)
+				) { //открывается узел
+                    //сбросим некоторые параметры
+                    ts.p.postData.rows = 10000;
+                    ts.p.postData.page = 1;
+                    ts.p.treeGrid_rootParams.otherData.nodeid = ts.p.postData.nodeid; //сохраняем ДО вызова ajax, т.к. после уже будет обнулен
+				}
+			}
+		},
+		treeGrid_afterLoadComplete = function() {
+			if (ts.p.treeGrid && ts.p.treeGrid_bigData) {
+				if (	ts.p.treeGrid_rootParams.otherData.nodeid != undefined 
+					&& 	typeof(ts.p.treeGrid_rootParams.otherData.nodeid) === 'string' 
+					&&	(
+                        	ts.p.treeGrid_rootParams.otherData.nodeid != "" //проверяем сохраненное значение,т.к. встроенное на этом этапе уже обнулено
+						||	
+                            parseInt(ts.p.treeGrid_rootParams.otherData.nodeid,10) > 0
+						)
+				) { //открывается узел
+					if (ts.p.treeGrid_rootParams != undefined && ts.p.treeGrid_rootParams != null) {
+						//после открытия ветки восстанавливаем параметры
+						//$.extend(true,ts.p, ts.p.treeGrid_rootParams); //не срослось
+						
+						ts.p.page = ts.p.treeGrid_rootParams.page;
+						ts.p.lastpage = ts.p.treeGrid_rootParams.lastpage;
+                        //ts.p.rowNum = ts.p.treeGrid_rootParams.rowNum;
+                        //ts.p.rowTotal = ts.p.treeGrid_rootParams.rowTotal;
+
+						ts.p.postData.rows = ts.p.treeGrid_rootParams.postData.rows;
+                        ts.p.postData.totalrows = ts.p.treeGrid_rootParams.postData.totalrows;
+						
+                        ts.p.treeGrid_rootParams.otherData.nodeid = ""; //обнулим ПОСЛЕ вызова ajax
+						//$.extend(ts.p, ts.p.treeGrid_rootParams);
+                        ts.updatepager(false,true);
+					}
+				} else { //открывается корень
+					// после открытия корня сохраняем параметры
+					ts.p.treeGrid_rootParams = {
+						page : ts.p.page,
+						lastpage : ts.p.lastpage,
+						postData : {
+                            rows: ts.p.postData.rows,
+                            totalrows: ts.p.postData.totalrows
+                        },
+                        rowNum : ts.p.rowNum,
+                        rowTotal : ts.p.rowTotal,
+                        //и в этой структуре будем хранить что-то другое, что не нужно для работы плагина
+                        otherData : {
+                            nodeid : ""
+                        }
+					};
+				}
+			}
+		},
+		//-bvn13
 		addXmlData = function (xml,t, rcnt, more, adjust) {
 			var startReq = new Date(),
 			locdata = (ts.p.datatype != "local" && ts.p.loadonce) || ts.p.datatype == "xmlstring",
@@ -1784,6 +1854,11 @@ $.fn.jqGrid = function( pin ) {
 					if(bfr === undefined) { bfr = true; }
 					if ( bfr === false ) { return; }
 				}
+				//+bvn13
+				if ($.isFunction(ts.treeGrid_beforeRequest)) {
+					ts.treeGrid_beforeRequest.call(ts);
+				}
+				//-bvn13
 				dt = ts.p.datatype.toLowerCase();
 				switch(dt)
 				{
@@ -1809,9 +1884,18 @@ $.fn.jqGrid = function( pin ) {
 							if(lc) { lc.call(ts,data); }
 							$(ts).triggerHandler("jqGridAfterLoadComplete", [data]);
 							if (pvis) { ts.grid.populateVisible(); }
-							if( ts.p.loadonce || ts.p.treeGrid) {ts.p.datatype = "local";}
+                            if (!ts.p.treeGrid_bigData) {
+    							if( ts.p.loadonce || ts.p.treeGrid) {ts.p.datatype = "local";}
+                            } else {
+    							if( ts.p.loadonce) {ts.p.datatype = "local";} //bvn13
+                            }
 							data=null;
 							if (npage === 1) { endReq(); }
+							//+bvn13
+							if ($.isFunction(ts.treeGrid_afterLoadComplete)) {
+								ts.treeGrid_afterLoadComplete.call(ts);
+							}
+							//-bvn13
 						},
 						error:function(xhr,st,err){
 							if($.isFunction(ts.p.loadError)) { ts.p.loadError.call(ts,xhr,st,err); }
@@ -2203,7 +2287,9 @@ $.fn.jqGrid = function( pin ) {
 			subgrid: {root:"rows", repeatitems: true, cell:"cell"}
 		},ts.p.localReader);
 		if(ts.p.scroll){
-			ts.p.pgbuttons = false; ts.p.pginput=false; ts.p.rowList=[];
+            if (!ts.p.treeGrid_bigData) { //*bvn13 - условие добавил
+    			ts.p.pgbuttons = false; ts.p.pginput=false; ts.p.rowList=[]; 
+            }
 		}
 		if(ts.p.data.length) { refreshIndex(); }
 		var thead = "<thead><tr class='ui-jqgrid-labels' role='rowheader'>",
@@ -2506,7 +2592,7 @@ $.fn.jqGrid = function( pin ) {
 			.scroll(grid.scrollGrid);
 		$("table:first",grid.bDiv).css({width:ts.p.tblwidth+"px"});
 		if( isMSIE ) {
-			if( $("tbody",this).length == 2 ) { $("tbody:gt(0)",this).remove();}
+			if( $("tbody",this).size() == 2 ) { $("tbody:gt(0)",this).remove();}
 			if( ts.p.multikey) {$(grid.bDiv).bind("selectstart",function(){return false;});}
 		} else {
 			if( ts.p.multikey) {$(grid.bDiv).bind("mousedown",function(){return false;});}
@@ -2615,9 +2701,16 @@ $.fn.jqGrid = function( pin ) {
 		this.grid = grid;
 		ts.addXmlData = function(d) {addXmlData(d,ts.grid.bDiv);};
 		ts.addJSONData = function(d) {addJSONData(d,ts.grid.bDiv);};
+		//+bvn13
+		ts.treeGrid_beforeRequest = function() { treeGrid_beforeRequest(); };
+		ts.treeGrid_afterLoadComplete = function() {treeGrid_afterLoadComplete(); };
+		//-bvn13
 		this.grid.cols = this.rows[0].cells;
 
 		populate();ts.p.hiddengrid=false;
+		$(window).unload(function () {
+			ts = null;
+		});
 	});
 };
 $.jgrid.extend({

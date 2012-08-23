@@ -131,10 +131,19 @@ $.jgrid.extend({
 			if(!$t.p.treeGrid) {return;}
 			if(!$t.p.treedatatype ) {$.extend($t.p,{treedatatype: $t.p.datatype});}
 			$t.p.subGrid = false;$t.p.altRows =false;
-			$t.p.pgbuttons = false;$t.p.pginput = false;
+            //+bvn13
+            if (!$t.p.treeGrid_bigData) {
+                $t.p.pgbuttons = false;$t.p.pginput = false;
+            }
+            //-bvn13
 			$t.p.gridview =  true;
-			if($t.p.rowTotal === null ) { $t.p.rowNum = 10000; }
-			$t.p.multiselect = false;$t.p.rowList = [];
+			if($t.p.rowTotal === null && !$t.p.treeGrid_bigData) { $t.p.rowNum = 10000; } //+bvn13
+			$t.p.multiselect = false;
+            //+bvn13
+            if (!$t.p.treeGrid_bigData) {
+                $t.p.rowList = [];
+            }
+            //-bvn13
 			$t.p.expColInd = 0;
 			pico = 'ui-icon-triangle-1-' + ($t.p.direction=="rtl" ? 'w' : 'e');
 			$t.p.treeIcons = $.extend({plus:pico,minus:'ui-icon-triangle-1-s',leaf:'ui-icon-radio-off'},$t.p.treeIcons || {});
@@ -187,6 +196,11 @@ $.jgrid.extend({
 	expandRow: function (record){
 		this.each(function(){
 			var $t = this;
+			//+bvn13
+			if (!$t.p.treeGrid_bigData) {
+                var $rootpages = $t.p.lastpage;
+            }
+			//-bvn13
 			if(!$t.grid || !$t.p.treeGrid) {return;}
 			var childern = $($t).jqGrid("getNodeChildren",record),
 			//if ($($t).jqGrid("isVisibleNode",record)) {
@@ -200,6 +214,11 @@ $.jgrid.extend({
 				}
 			});
 			//}
+			//+bvn13
+			if (!$t.p.treeGrid_bigData) {
+                $t.p.lastpage = $rootpages;
+            }
+			//-bvn13
 		});
 	},
 	collapseRow : function (record) {
@@ -559,7 +578,7 @@ $.jgrid.extend({
 			var expanded = $t.p.treeReader.expanded_field,
 			isLeaf = $t.p.treeReader.leaf_field,
 			level = $t.p.treeReader.level_field,
-			//icon = $t.p.treeReader.icon_field,
+			icon = $t.p.treeReader.icon_field, //+bvn13 - раскомментировал
 			parent = $t.p.treeReader.parent_id_field,
 			left = $t.p.treeReader.left_field,
 			right = $t.p.treeReader.right_field,
